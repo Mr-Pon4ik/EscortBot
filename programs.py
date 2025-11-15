@@ -40,11 +40,20 @@ class Get_data():
     
 programs = Get_data()
 
-class Default():
-    """ Class for only read log file """
+class __Default():
+    """ Class for only read log file 
+        working_status is var status for State Machine:
+            stopped
+            checked
+            changed
+            sending
+            error
+    """
+
 
     PROGRAM_NAME = ''
-    working_status = False
+    working_status = 'stopped'
+    __error_text = ''
     
     def __init__(self, name= '', path_log_file= '', name_param_path= None):
         programs.list_programs.append(self)
@@ -130,7 +139,7 @@ class Debug():
         return custom_logger
             
         
-class Nextcloud(Default):
+class Nextcloud(__Default):
     """ Class for control NextCloud """
     
     def __init__(self, path_log_file= '', urlAPI= None, NC_Token= None):
@@ -154,14 +163,62 @@ class Nextcloud(Default):
             return(self.name, ': ', err) 
       
     
-class SSH(Default):
-    """ Class for control ssh connections """    
-    
+class SSH(__Default):
+    """ Class for control ssh connections """
+    __time_change = 0
+    __log_position = 0
+    __last_line = []
+    message = ''
+
     def __init__(self, path_log_file=''):
         super().__init__(name= 'SSH', path_log_file= path_log_file, name_param_path= 'ssh_log_path')
 
     def get_settings(self):
         return self.settings
+    
+    def checking_log_file(self):
+        if self.working_status == 'checked':
+            if  os.path.getmtime(self.get_path()) != self.__time_change:
+                self.__last_line = get_last_strings_from_file( path_file=self.get_path(), 
+                                                                        quantity_strings=10)
+                if  len(self.__last_line) > 0:
+                    if self.__last_line[0][0] == -1:
+                        self.__error_text=f'⚠️ SSH error: {self.__last_line[0][1]}'
+                        self.working_status = 'error'
+                        self.__time_change = os.path.getmtime(self.get_path())
+                    else:
+                        self.working_status = 'changed'
+                        self.__time_change = os.path.getmtime(self.get_path())
+        else:
+            self.__error_text=f'⚠️ SSH error: status does not match the method'
+            self.working_status = 'error'
+
+    def prepare_message(self):
+        if self.working_status == 'changed':
+            ssh_sort_line = search_for_lines_by_words( byte_list_line=self.__last_line,
+                                                                    position_last_find=self.__log_position,
+                                                                    turple_keyword=['sshd'],
+                                                                    turple_stopword=['closed'] )
+            self.__log_position = ssh_sort_line[0]
+            for line in ssh_sort_line[1]:
+                if re.search('RSA', line):
+                    self.message += line[:re.search('RSA', line).end()]+b'\r\n'.decode()
+                else:
+                    self.message += line
+            self.__last_line = []
+            self.working_status = 'sending'
+        else:
+            self.message = '⚠️ SSH error: status does not match the method'
+            self.__error_text='⚠️ SSH error: status does not match the method'
+            self.working_status = 'error'
+    
+    def get_error(self):
+        error = ''
+        if self.working_status == 'error':
+            self.working_status = 'checked'
+            error = self.__error_text
+        return error
+
 
     
 class TelegramBot():
@@ -208,13 +265,13 @@ class TelegramBot():
             return 'The token is not specified'
         
     def send_message(self, message=''):
-        if(self.working_status == True):
+        if(self.working_status != 'stopped'):
             self.bot.send_message(self.settings['chat_id'], message)
 
 def get_last_strings_from_file(path_file, quantity_strings=1):
-    if quantity_strings < 1:
-        return []
     lines = []
+    if quantity_strings < 1:
+        return lines
     try:
         with open(path_file, 'rb') as f:
             temp_binary_file = f.read()
@@ -241,7 +298,7 @@ def get_last_strings_from_file(path_file, quantity_strings=1):
         lines.append((cursor_position, line))
     return lines
 
-def search_for_lines_by_words(byte_list_line=(), position_last_find=0, turple_keyword=[], turple_stopword=[]):
+def search_for_lines_by_words(byte_list_line=[], position_last_find=0, turple_keyword=[], turple_stopword=[]):
     lines = [position_last_find, []]
     for line in byte_list_line:
         if line[0] >= position_last_find:
@@ -255,6 +312,6 @@ def search_for_lines_by_words(byte_list_line=(), position_last_find=0, turple_ke
                     string_good = False
                     break
             if string_good:
-                lines[1].append(line[1].decode().rstrip('\r\n'))
+                lines[1].append(line[1].decode())
                 lines[0] = line[0] + len(line[1])
     return lines
