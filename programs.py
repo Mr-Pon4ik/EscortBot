@@ -206,7 +206,10 @@ class SSH(__Default):
                 else:
                     self.message += line
             self.__last_line = []
-            self.working_status = 'sending'
+            if len(self.message) > 0:
+                self.working_status = 'sending'
+            else:
+                self.working_status = 'checked'
         else:
             self.message = '⚠️ SSH error: status does not match the method'
             self.__error_text='⚠️ SSH error: status does not match the method'

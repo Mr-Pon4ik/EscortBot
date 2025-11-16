@@ -86,10 +86,14 @@ if (telegram_bot.check_id_status == False):
     telegram_bot.bot.polling(none_stop=True)
 
 telegram_bot.send_message(message= '👾Hello, it is EscortBot for your server. I was just launched ;)')
+alarm_count = 0
 
 while(possible_launch):
+    if alarm_count > 4:
+        possible_launch = False
     #***---------------SSH module-----------------***
     try:
+        #raise Exception('Test alarm')
         if ssh.working_status == 'checked':
             ssh.checking_log_file()
         elif ssh.working_status == 'changed':
@@ -108,6 +112,46 @@ while(possible_launch):
         escort_logger.exception(f'Окак')
         telegram_bot.send_message(message= f'{error}')
         telegram_bot.send_message(message= f'Bot: Окак')
+        alarm_count += 1
     
     time.sleep(1)
 
+'''
+2025-11-16 19:07 INFO
+2025-11-16 19:07 ERROR Окак
+Traceback (most recent call last):
+  File "/opt/TelegramBotEscortServer/TelegramBot_for_HomeServer.py", line 104, in <module>
+    telegram_bot.send_message(message= ssh.message)
+  File "/opt/TelegramBotEscortServer/programs.py", line 269, in send_message
+    self.bot.send_message(self.settings['chat_id'], message)
+  File "/opt/TelegramBotEscortServer/.venv/lib/python3.12/site-packages/telebot/__init__.py", line 1800, in send_message
+    apihelper.send_message(
+  File "/opt/TelegramBotEscortServer/.venv/lib/python3.12/site-packages/telebot/apihelper.py", line 275, in send_message
+    return _make_request(token, method_url, params=payload, method='post')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/TelegramBotEscortServer/.venv/lib/python3.12/site-packages/telebot/apihelper.py", line 168, in _make_request
+    json_result = _check_result(method_name, result)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/TelegramBotEscortServer/.venv/lib/python3.12/site-packages/telebot/apihelper.py", line 195, in _check_result
+    raise ApiTelegramException(method_name, result, result_json)
+telebot.apihelper.ApiTelegramException: A request to the Telegram API was unsuccessful. Error code: 400. Description: Bad Request: message text is empty
+2025-11-16 19:07 INFO
+2025-11-16 19:07 ERROR Окак
+Traceback (most recent call last):
+  File "/opt/TelegramBotEscortServer/TelegramBot_for_HomeServer.py", line 104, in <module>
+    telegram_bot.send_message(message= ssh.message)
+  File "/opt/TelegramBotEscortServer/programs.py", line 269, in send_message
+    self.bot.send_message(self.settings['chat_id'], message)
+  File "/opt/TelegramBotEscortServer/.venv/lib/python3.12/site-packages/telebot/__init__.py", line 1800, in send_message
+    apihelper.send_message(
+  File "/opt/TelegramBotEscortServer/.venv/lib/python3.12/site-packages/telebot/apihelper.py", line 275, in send_message
+    return _make_request(token, method_url, params=payload, method='post')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/TelegramBotEscortServer/.venv/lib/python3.12/site-packages/telebot/apihelper.py", line 168, in _make_request
+    json_result = _check_result(method_name, result)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/TelegramBotEscortServer/.venv/lib/python3.12/site-packages/telebot/apihelper.py", line 195, in _check_result
+    raise ApiTelegramException(method_name, result, result_json)
+telebot.apihelper.ApiTelegramException: A request to the Telegram API was unsuccessful. Error code: 400. Description: Bad Request: message text is empty
+
+'''
