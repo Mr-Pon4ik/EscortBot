@@ -3,6 +3,7 @@ import string
 import tempfile
 import os
 import programs
+import time
 from io import BytesIO
 from unittest.mock import patch, MagicMock
 
@@ -128,7 +129,7 @@ def test_default_search_for_zero_lines_by_words():
     kyewords = ('line')
     stopwords = ('33')
     start_position = 0
-    expected_value = [16, ['line 2\r\n']]
+    expected_value = [27, ['line 2\r\n']]
     return_value = search_for_lines_by_words(position_last_find=start_position,
                                              byte_list_line=input_list_line,
                                              turple_keyword=kyewords,
@@ -136,11 +137,11 @@ def test_default_search_for_zero_lines_by_words():
     assert(expected_value == return_value)
 
 def test_search_for_lines_by_words():
-    input_list_line = [(8, b'line 2\r\n'),(16, b'line 33\r\n'), (25, b'line test\r\n')]
+    input_list_line = [(8, b'line 2\r\n'),(16, b'line 33\r\n'), (25, b'line test\r\n'), (37, b'hello\r\n')]
     kyewords = ('line')
     stopwords = ('33')
-    start_position = 25
-    expected_value = [36, ['line test\r\n']]
+    start_position = 10
+    expected_value = [44, ['line test\r\n']]
     return_value = search_for_lines_by_words(position_last_find=start_position,
                                              byte_list_line=input_list_line,
                                              turple_keyword=kyewords,
@@ -152,7 +153,7 @@ def test_empty_search_for_lines_by_words():
     kyewords = ('hello')
     stopwords = ('33')
     start_position = 25
-    expected_value = [25, []]
+    expected_value = [36, []]
     return_value = search_for_lines_by_words(position_last_find=start_position,
                                              byte_list_line=input_list_line,
                                              turple_keyword=kyewords,
@@ -164,7 +165,7 @@ def test_search_for_custom_lines_by_words():
     kyewords = ('sshd')
     stopwords = ('closed')
     start_position = 0
-    expected_value = [0, []]
+    expected_value = [22, []]
     return_value = search_for_lines_by_words(position_last_find=start_position,
                                              byte_list_line=input_list_line,
                                              turple_keyword=kyewords,
@@ -204,7 +205,7 @@ def test_SSH_checking_log_file_error():
                                 delete_on_close=False) as test_file:
         test_file.close()
         ssh.checking_log_file()
-        assert(ssh.working_status == 'error' and ssh.get_error() == '⚠️ SSH error: status does not match the method')
+        assert(ssh.working_status == 'error' and ssh.get_error() == '⚠️ SSH error: status (stopped) does not match the method (checking_log_file)')
 
 def test_SSH_prepare_message():
     ssh = programs.SSH()
@@ -220,6 +221,20 @@ def test_SSH_prepare_message():
         ssh.prepare_message()
         assert(ssh.message == 'line sshd 1\r\nline sshd 3\r\n' and ssh.working_status == 'sending')
 
+def test_SSH_last_position():
+    ssh = programs.SSH()
+    with tempfile.TemporaryFile(mode='w+b',
+                                dir=f'{os.path.dirname(os.path.abspath(__file__))}',
+                                delete_on_close=False) as test_file:
+        test_file.write(b'line sshd 1\r\nline 2\r\nline 3\r\n')
+        test_file.close()
+        ssh.settings['ssh_log_path'] = str(test_file.name)
+        assert(ssh.ckg_settings() == 'Ok')
+        ssh.working_status = 'checked'
+        ssh.checking_log_file()
+        ssh.prepare_message()
+        assert(ssh._SSH__log_position == 29)
+
 def test_SSH_prepare_empty_message():
     ssh = programs.SSH()
     with tempfile.TemporaryFile(mode='w+b',
@@ -233,3 +248,30 @@ def test_SSH_prepare_empty_message():
         ssh.checking_log_file()
         ssh.prepare_message()
         assert(ssh.message == '' and ssh.working_status == 'checked')
+
+def test_SSH_multiple_entries():
+    ssh = programs.SSH()
+    with tempfile.TemporaryFile(mode='w+b',
+                                dir=f'{os.path.dirname(os.path.abspath(__file__))}',
+                                delete_on_close=False) as test_file:
+        test_file.write(b'line sshd 1\r\nline 2\r\nline 3\r\n')
+        test_file.close()
+        ssh.settings['ssh_log_path'] = str(test_file.name)
+        assert(ssh.ckg_settings() == 'Ok')
+        ssh.working_status = 'checked'
+        ssh.checking_log_file()
+        ssh.prepare_message()
+        assert(ssh._SSH__log_position == 29)
+        assert(ssh.message == 'line sshd 1\r\n')
+        assert(ssh.working_status == 'sending')
+        ssh.reset_module()
+        assert(ssh._SSH__log_position == 29)
+        assert(ssh.message == '')
+        assert(ssh.working_status == 'checked')
+        time.sleep(0.1)
+        write_to_file(test_file.name, b'helli\r\nline 5 \r\n name sshd \r\n', mode='ab')
+        ssh.checking_log_file()
+        ssh.prepare_message()
+        assert(ssh._SSH__log_position == 58)
+        assert(ssh.message == ' name sshd \r\n')
+        assert(ssh.working_status == 'sending')

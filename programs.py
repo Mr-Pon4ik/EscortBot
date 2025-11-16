@@ -178,9 +178,10 @@ class SSH(__Default):
     
     def checking_log_file(self):
         if self.working_status == 'checked':
+            self.message = ''
             if  os.path.getmtime(self.get_path()) != self.__time_change:
                 self.__last_line = get_last_strings_from_file( path_file=self.get_path(), 
-                                                                        quantity_strings=10)
+                                                                quantity_strings=10)
                 if  len(self.__last_line) > 0:
                     if self.__last_line[0][0] == -1:
                         self.__error_text=f'⚠️ SSH error: {self.__last_line[0][1]}'
@@ -190,17 +191,18 @@ class SSH(__Default):
                         self.working_status = 'changed'
                         self.__time_change = os.path.getmtime(self.get_path())
         else:
-            self.__error_text=f'⚠️ SSH error: status does not match the method'
+            self.__error_text=f'⚠️ SSH error: status ({self.working_status}) does not match the method (checking_log_file)'
             self.working_status = 'error'
 
     def prepare_message(self):
         if self.working_status == 'changed':
-            ssh_sort_line = search_for_lines_by_words( byte_list_line=self.__last_line,
-                                                                    position_last_find=self.__log_position,
-                                                                    turple_keyword=['sshd'],
-                                                                    turple_stopword=['closed'] )
-            self.__log_position = ssh_sort_line[0]
-            for line in ssh_sort_line[1]:
+            self.message = ''
+            sort_line = search_for_lines_by_words( byte_list_line=self.__last_line,
+                                                        position_last_find=self.__log_position,
+                                                        turple_keyword=['sshd'],
+                                                        turple_stopword=['closed'] )
+            self.__log_position = sort_line[0]
+            for line in sort_line[1]:
                 if re.search('RSA', line):
                     self.message += line[:re.search('RSA', line).end()]+b'\r\n'.decode()
                 else:
@@ -211,9 +213,19 @@ class SSH(__Default):
             else:
                 self.working_status = 'checked'
         else:
-            self.message = '⚠️ SSH error: status does not match the method'
-            self.__error_text='⚠️ SSH error: status does not match the method'
-            self.working_status = 'error'
+            self.message= f'⚠️ SSH error: status ({self.working_status}) does not match the method (prepare_message)'
+            self.__error_text= f'⚠️ SSH error: status ({self.working_status}) does not match the method (prepare_message)'
+            self.working_status= 'error'
+    
+    def reset_module(self):
+        self.message = ''
+        self.__last_line = []
+        if self.ckg_settings() == 'Ok':
+            self.working_status = 'checked'
+        else:
+            self.__log_position = 0
+            self.working_status = 'stopped'
+                    
     
     def get_error(self):
         error = ''
@@ -316,5 +328,5 @@ def search_for_lines_by_words(byte_list_line=[], position_last_find=0, turple_ke
                     break
             if string_good:
                 lines[1].append(line[1].decode())
-                lines[0] = line[0] + len(line[1])
+    lines[0] = byte_list_line[-1][0] + len(byte_list_line[-1][1])
     return lines
