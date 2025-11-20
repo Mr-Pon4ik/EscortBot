@@ -166,6 +166,7 @@ class Nextcloud(__Default):
 class SSH(__Default):
     """ Class for control ssh connections """
     __time_change = 0
+    __time_creating = 0
     __log_position = 0
     __last_line = []
     message = ''
@@ -199,8 +200,8 @@ class SSH(__Default):
             self.message = ''
             sort_line = search_for_lines_by_words( byte_list_line=self.__last_line,
                                                         position_last_find=self.__log_position,
-                                                        turple_keyword=['sshd'],
-                                                        turple_stopword=['closed'] )
+                                                        tuple_keyword=('sshd',),
+                                                        tuple_stopword=('closed',))
             self.__log_position = sort_line[0]
             for line in sort_line[1]:
                 if re.search('RSA', line):
@@ -225,7 +226,6 @@ class SSH(__Default):
         else:
             self.__log_position = 0
             self.working_status = 'stopped'
-                    
     
     def get_error(self):
         error = ''
@@ -313,16 +313,18 @@ def get_last_strings_from_file(path_file, quantity_strings=1):
         lines.append((cursor_position, line))
     return lines
 
-def search_for_lines_by_words(byte_list_line=[], position_last_find=0, turple_keyword=[], turple_stopword=[]):
-    lines = [position_last_find, []]
+def search_for_lines_by_words(byte_list_line=[], position_last_find=0, tuple_keyword=(), tuple_stopword=()):
+    lines = [int(), []]
+    if position_last_find > byte_list_line[-1][0] + len(byte_list_line[-1][1]):
+        position_last_find = 0
     for line in byte_list_line:
         if line[0] >= position_last_find:
             string_good = True
-            for keyword in turple_keyword:
+            for keyword in tuple_keyword:
                 if re.search(keyword, line[1].decode())==None:
                     string_good = False
                     break
-            for stopword in turple_stopword:
+            for stopword in tuple_stopword:
                 if re.search(stopword, line[1].decode()):
                     string_good = False
                     break
