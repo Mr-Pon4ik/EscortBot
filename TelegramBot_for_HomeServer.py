@@ -70,7 +70,7 @@ for program in programs.Get_data.list_programs:
     ckg_settings_temp = program.ckg_settings()
     escort_logger.debug(f'{program.PROGRAM_NAME}: {ckg_settings_temp}')
     if ckg_settings_temp == 'Ok':
-        program.working_status = True
+        program.working_status = 'checked'
         escort_logger.debug(f'Module "{program.PROGRAM_NAME}" ready to start')
         escort_logger.debug('------------------------------------------------')
         if program.PROGRAM_NAME != 'Logging':
@@ -79,9 +79,6 @@ for program in programs.Get_data.list_programs:
 escort_logger.info('')
 escort_logger.info('Program start')
 
-ssh_time_change = 0
-ssh_log_last_position = 0
-
 if (telegram_bot.check_id_status == False):
     @telegram_bot.bot.message_handler(commands=['start'])
     def welcome(message):
@@ -89,43 +86,33 @@ if (telegram_bot.check_id_status == False):
     telegram_bot.bot.polling(none_stop=True)
 
 telegram_bot.send_message(message= '👾Hello, it is EscortBot for your server. I was just launched ;)')
+alarm_count = 0
 
 while(possible_launch):
+    if alarm_count > 4 or ssh.working_status == 'stopped':
+        possible_launch = False
     #***---------------SSH module-----------------***
     try:
-        if ssh.working_status == True and os.path.getmtime(ssh.get_path()) != ssh_time_change:
-            ssh_last_byte_line = programs.get_last_strings_from_file( path_file=ssh.get_path(), 
-                                                                      quantity_strings=10)
-            if ssh_last_byte_line[0][0] == -1:
-                telegram_bot.send_message(message=f'⚠️ SSH error: {ssh_last_byte_line[0][1]}')
-                escort_logger.error(f'SSH error: {ssh_last_byte_line[0][1]}')
-                ssh_time_change = os.path.getmtime(ssh.get_path())
-                continue
-            else:
-                ssh_time_change = os.path.getmtime(ssh.get_path())
-            send_message_flag = False
-            ssh_sort_line = programs.search_for_lines_by_words( byte_list_line=ssh_last_byte_line,
-                                                                position_last_find=ssh_log_last_position,
-                                                                turple_keyword=['sshd'],
-                                                                turple_stopword=['closed'] )
-            ssh_log_last_position = ssh_sort_line[0]
-            for line in ssh_sort_line[1]:
-                if send_message_flag == False:
-                    telegram_bot.send_message(message= '‼️‼️‼️ ATTENTION, an attempt was made to connect to the server via ssh.')
-                    send_message_flag = True
-                if re.search('RSA', line):
-                    line = line[:re.search('RSA', line).end()]
-                    escort_logger.info(line)
-                    telegram_bot.send_message(message= line)
-                else:
-                    escort_logger.info(line)
-                    telegram_bot.send_message(message= line)
+        #raise Exception('Test alarm')
+        if ssh.working_status == 'checked':
+            ssh.checking_log_file()
+        elif ssh.working_status == 'changed':
+            message = ssh.prepare_message()
+        elif ssh.working_status == 'sending':
+            telegram_bot.send_message(message= '‼️‼️‼️ ATTENTION, an attempt was made to connect to the server via ssh.')
+            escort_logger.info(ssh.message)
+            telegram_bot.send_message(message= ssh.message)
+            ssh.reset_module()
+        if ssh.working_status == 'error':
+            error = ssh.get_error()
+            escort_logger.info(message= error)
+            telegram_bot.send_message(message= error)
+            ssh.reset_module()
+        
     except Exception as error:
         escort_logger.exception(f'Окак')
         telegram_bot.send_message(message= f'{error}')
         telegram_bot.send_message(message= f'Bot: Окак')
+        alarm_count += 1
     
     time.sleep(1)
-
-
-

@@ -40,11 +40,20 @@ class Get_data():
     
 programs = Get_data()
 
-class Default():
-    """ Class for only read log file """
+class __Default():
+    """ Class for only read log file 
+        working_status is var status for State Machine:
+            stopped
+            checked
+            changed
+            sending
+            error
+    """
+
 
     PROGRAM_NAME = ''
-    working_status = False
+    working_status = 'stopped'
+    __error_text = ''
     
     def __init__(self, name= '', path_log_file= '', name_param_path= None):
         programs.list_programs.append(self)
@@ -130,7 +139,7 @@ class Debug():
         return custom_logger
             
         
-class Nextcloud(Default):
+class Nextcloud(__Default):
     """ Class for control NextCloud """
     
     def __init__(self, path_log_file= '', urlAPI= None, NC_Token= None):
@@ -154,14 +163,77 @@ class Nextcloud(Default):
             return(self.name, ': ', err) 
       
     
-class SSH(Default):
-    """ Class for control ssh connections """    
-    
+class SSH(__Default):
+    """ Class for control ssh connections """
+    __time_change = 0
+    __time_creating = 0
+    __log_position = 0
+    __last_line = []
+    message = ''
+
     def __init__(self, path_log_file=''):
         super().__init__(name= 'SSH', path_log_file= path_log_file, name_param_path= 'ssh_log_path')
 
     def get_settings(self):
         return self.settings
+    
+    def checking_log_file(self):
+        if self.working_status == 'checked':
+            self.message = ''
+            if  os.path.getmtime(self.get_path()) != self.__time_change:
+                self.__last_line = get_last_strings_from_file( path_file=self.get_path(), 
+                                                                quantity_strings=10)
+                if  len(self.__last_line) > 0:
+                    if self.__last_line[0][0] == -1:
+                        self.__error_text=f'⚠️ SSH error: {self.__last_line[0][1]}'
+                        self.working_status = 'error'
+                        self.__time_change = os.path.getmtime(self.get_path())
+                    else:
+                        self.working_status = 'changed'
+                        self.__time_change = os.path.getmtime(self.get_path())
+        else:
+            self.__error_text=f'⚠️ SSH error: status ({self.working_status}) does not match the method (checking_log_file)'
+            self.working_status = 'error'
+
+    def prepare_message(self):
+        if self.working_status == 'changed':
+            self.message = ''
+            sort_line = search_for_lines_by_words( byte_list_line=self.__last_line,
+                                                        position_last_find=self.__log_position,
+                                                        tuple_keyword=('sshd',),
+                                                        tuple_stopword=('closed',))
+            self.__log_position = sort_line[0]
+            for line in sort_line[1]:
+                if re.search('RSA', line):
+                    self.message += line[:re.search('RSA', line).end()]+b'\r\n'.decode()
+                else:
+                    self.message += line
+            self.__last_line = []
+            if len(self.message) > 0:
+                self.working_status = 'sending'
+            else:
+                self.working_status = 'checked'
+        else:
+            self.message= f'⚠️ SSH error: status ({self.working_status}) does not match the method (prepare_message)'
+            self.__error_text= f'⚠️ SSH error: status ({self.working_status}) does not match the method (prepare_message)'
+            self.working_status= 'error'
+    
+    def reset_module(self):
+        self.message = ''
+        self.__last_line = []
+        if self.ckg_settings() == 'Ok':
+            self.working_status = 'checked'
+        else:
+            self.__log_position = 0
+            self.working_status = 'stopped'
+    
+    def get_error(self):
+        error = ''
+        if self.working_status == 'error':
+            self.working_status = 'checked'
+            error = self.__error_text
+        return error
+
 
     
 class TelegramBot():
@@ -208,13 +280,13 @@ class TelegramBot():
             return 'The token is not specified'
         
     def send_message(self, message=''):
-        if(self.working_status == True):
+        if(self.working_status != 'stopped'):
             self.bot.send_message(self.settings['chat_id'], message)
 
 def get_last_strings_from_file(path_file, quantity_strings=1):
-    if quantity_strings < 1:
-        return []
     lines = []
+    if quantity_strings < 1:
+        return lines
     try:
         with open(path_file, 'rb') as f:
             temp_binary_file = f.read()
@@ -241,20 +313,22 @@ def get_last_strings_from_file(path_file, quantity_strings=1):
         lines.append((cursor_position, line))
     return lines
 
-def search_for_lines_by_words(byte_list_line=(), position_last_find=0, turple_keyword=[], turple_stopword=[]):
-    lines = [position_last_find, []]
+def search_for_lines_by_words(byte_list_line=[], position_last_find=0, tuple_keyword=(), tuple_stopword=()):
+    lines = [int(), []]
+    if position_last_find > byte_list_line[-1][0] + len(byte_list_line[-1][1]):
+        position_last_find = 0
     for line in byte_list_line:
         if line[0] >= position_last_find:
             string_good = True
-            for keyword in turple_keyword:
+            for keyword in tuple_keyword:
                 if re.search(keyword, line[1].decode())==None:
                     string_good = False
                     break
-            for stopword in turple_stopword:
+            for stopword in tuple_stopword:
                 if re.search(stopword, line[1].decode()):
                     string_good = False
                     break
             if string_good:
-                lines[1].append(line[1].decode().rstrip('\r\n'))
-                lines[0] = line[0] + len(line[1])
+                lines[1].append(line[1].decode())
+    lines[0] = byte_list_line[-1][0] + len(byte_list_line[-1][1])
     return lines
